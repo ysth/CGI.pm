@@ -38,6 +38,7 @@ use constant XHTML_DTD => ['-//W3C//DTD XHTML 1.0 Transitional//EN',
 }
 
 $MOD_PERL            = 0; # no mod_perl by default
+$PSGI                = 0;
 
 #global settings
 $POST_MAX            = -1; # no limit to uploaded files
@@ -1017,9 +1018,9 @@ END_OF_FUNC
 sub read_from_client {
     my($self, $buff, $len, $offset) = @_;
     local $^W=0;                # prevent a warning
-    return $MOD_PERL
-        ? $self->r->read($$buff, $len, $offset)
-        : read(\*STDIN, $$buff, $len, $offset);
+    return $MOD_PERL ? $self->r->read($$buff, $len, $offset) :
+           $PSGI     ? $ENV{'psgi.input'}->read($$buff, $len, $offset) :
+                       read(\*STDIN, $$buff, $len, $offset);
 }
 END_OF_FUNC
 
@@ -1042,6 +1043,8 @@ sub read_from_stdin {
 	if ( $MOD_PERL ) {
 	    $res = $self->r->read($tempbuf, $bufsiz, 0)
 	}
+        elsif ( $PSGI ) {
+            $res = $ENV{'psgi.input'}->read($tempbuf, $bufsiz);
 	else {
 	    $res = read(\*STDIN, $tempbuf, $bufsiz);
 	}
@@ -1600,7 +1603,16 @@ sub header {
     if (($MOD_PERL >= 1) && !$nph) {
         $self->r->send_cgi_header($header);
         return '';
+    } elsif ($PSGI) {
+        $status =~ s/^(\d+).*$/$1/ if $status;
+        my $headers = [];
+        for my $h (@header) {
+            $h =~ /^([a-zA-Z_\-]+):\s*(.*)$/
+                and push @$headers, $1, $2;
+        }
+        return $status || 200, $headers;
     }
+
     return $header;
 }
 END_OF_FUNC
