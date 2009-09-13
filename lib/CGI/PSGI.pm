@@ -52,18 +52,15 @@ reference during the lifetime of your application.
 For instance with L<CGI::Application>,
 
   use MyApp; # is a CGI::Application app
+  use CGI::Application::PSGI;
 
-  use CGI::PSGI;
   my $app = sub {
       my $env = shift;
       local *ENV = $env;
       $ENV{CGI_APP_RETURN_ONLY} = 1;
 
       my $webapp = MyApp->new;
-      my $body = $webapp->run;
-
-      my($status, $header) = $webapp->query->header;
-      return [ $status, $header, [ $body ] ];
+      CGI::Application::PSGI->run($webapp);
   };
 
 =head1 AUTHOR
