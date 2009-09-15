@@ -372,7 +372,7 @@ sub new {
     }
     undef $NPH;
   }
-  $self->_reset_globals if $PERLEX;
+  $self->_reset_globals if $PERLEX || $PSGI;
   $self->init(@initializer);
   return $self;
 }
