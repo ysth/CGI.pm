@@ -372,7 +372,7 @@ sub new {
     }
     undef $NPH;
   }
-  $self->_reset_globals if $PERLEX;
+  $self->_reset_globals if $PERLEX || $PSGI;
   $self->init(@initializer);
   return $self;
 }
@@ -1043,8 +1043,9 @@ sub read_from_stdin {
 	if ( $MOD_PERL ) {
 	    $res = $self->r->read($tempbuf, $bufsiz, 0)
 	}
-        elsif ( $PSGI ) {
-            $res = $ENV{'psgi.input'}->read($tempbuf, $bufsiz);
+	elsif ( $PSGI ) {
+	    $res = $ENV{'psgi.input'}->read($tempbuf, $bufsiz);
+	}
 	else {
 	    $res = read(\*STDIN, $tempbuf, $bufsiz);
 	}
