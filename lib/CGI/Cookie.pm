@@ -20,6 +20,7 @@ $CGI::Cookie::VERSION='1.29';
 
 use CGI::Util qw(rearrange unescape escape);
 use CGI;
+use Carp;
 use overload '""' => \&as_string,
     'cmp' => \&compare,
     'fallback'=>1;
@@ -123,25 +124,23 @@ sub new {
   # Ignore mod_perl request object--compatability with Apache::Cookie.
   shift if ref $_[0]
         && eval { $_[0]->isa('Apache::Request::Req') || $_[0]->isa('Apache') };
-  my($name,$value,$path,$domain,$secure,$expires,$httponly) =
+  my($name,$value,$path,$domain,$secure,$expires,$max_age, $httponly) =
     rearrange([ 'NAME', ['VALUE','VALUES'], qw/ PATH DOMAIN SECURE EXPIRES
-        HTTPONLY / ], @_);
+        MAX-AGE HTTPONLY / ], @_);
+
+  croak "can't use both 'expires' and 'max-age' arguments at the same time" 
+    if $expires and $max_age;
   
   # Pull out our parameters.
-  my @values;
-  if (ref($value)) {
-    if (ref($value) eq 'ARRAY') {
-      @values = @$value;
-    } elsif (ref($value) eq 'HASH') {
-      @values = %$value;
-    }
-  } else {
-    @values = ($value);
-  }
-  
+  my @values = !ref $value           ? $value 
+             : ref $value eq 'ARRAY' ? @$value 
+             : ref $value eq 'HASH'  ? %$value
+             :                         ()
+             ;
+
   bless my $self = {
-		    'name'=>$name,
-		    'value'=>[@values],
+		    'name'  => $name,
+		    'value' => \@values,
 		   },$class;
 
   # IE requires the path and domain to be present for some reason.
@@ -154,8 +153,8 @@ sub new {
   $self->domain($domain) if defined $domain;
   $self->secure($secure) if defined $secure;
   $self->expires($expires) if defined $expires;
+  $self->max_age($max_age) if defined $max_age;
   $self->httponly($httponly) if defined $httponly;
-#  $self->max_age($expires) if defined $expires;
   return $self;
 }
 
@@ -167,8 +166,11 @@ sub as_string {
 
     push(@constant_values,"domain=$domain")   if $domain = $self->domain;
     push(@constant_values,"path=$path")       if $path = $self->path;
-    push(@constant_values,"expires=$expires") if $expires = $self->expires;
-    push(@constant_values,"max-age=$max_age") if $max_age = $self->max_age;
+    if ( $self->max_age ) {
+        push @constant_values,
+            'expires='.$self->expires,
+            'max-age='.$self->max_age;
+    }
     push(@constant_values,"secure") if $secure = $self->secure;
     push(@constant_values,"HttpOnly") if $httponly = $self->httponly;
 
@@ -178,8 +180,7 @@ sub as_string {
 }
 
 sub compare {
-    my $self = shift;
-    my $value = shift;
+    my ( $self, $value ) = @_;
     return "$self" cmp $value;
 }
 
@@ -242,16 +243,28 @@ sub secure {
 
 sub expires {
     my $self = shift;
-    my $expires = shift;
-    $self->{'expires'} = CGI::Util::expires($expires,'cookie') if defined $expires;
-    return $self->{'expires'};
+
+    if( my $time = shift ) {
+        $time -= time if $time =~ /^\d+/;
+        $self->{max_age} = CGI::Util::max_age_calc( $time );
+    }
+
+    return defined( $self->{max_age} )
+        ? CGI::Util::expires(time() + $self->max_age,'cookie')
+        : undef 
+        ;
 }
 
 sub max_age {
   my $self = shift;
-  my $expires = shift;
-  $self->{'max-age'} = CGI::Util::expire_calc($expires)-time() if defined $expires;
-  return $self->{'max-age'};
+  if ( my $max_age = shift ) {
+      # so that passing a max age of 3 isn't considered as
+      # a timestamp of the 70s
+      $max_age = '+' . $max_age unless $max_age =~ /^[+-]/;
+      $self->{max_age} = 0 + CGI::Util::max_age_calc($max_age);
+  }
+
+  return $self->{max_age};
 }
 
 sub path {

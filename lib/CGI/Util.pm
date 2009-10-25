@@ -264,12 +264,8 @@ sub expires {
     my($time,$format) = @_;
     $format ||= 'http';
 
-    my(@MON)=qw/Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec/;
-    my(@WDAY) = qw/Sun Mon Tue Wed Thu Fri Sat/;
-
-    # pass through preformatted dates for the sake of expire_calc()
-    $time = expire_calc($time);
-    return $time unless $time =~ /^\d+$/;
+    my @MON =qw/Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec/;
+    my @WDAY  = qw/Sun Mon Tue Wed Thu Fri Sat/;
 
     # make HTTP/cookie date string from GMT'ed time
     # (cookies use '-' as date separator, HTTP uses ' ')
@@ -285,6 +281,10 @@ sub expires {
 # hours from the current time.  It incorporates modifications from 
 # Mark Fisher.
 sub expire_calc {
+    return max_age_calc( @_ ) + time;
+}
+
+sub max_age_calc {
     my($time) = @_;
     my(%mult) = ('s'=>1,
                  'm'=>60,
@@ -304,16 +304,20 @@ sub expire_calc {
     # If you don't supply one of these forms, we assume you are
     # specifying the date yourself
     my($offset);
-    if (!$time || (lc($time) eq 'now')) {
-      $offset = 0;
-    } elsif ($time=~/^\d+/) {
-      return $time;
-    } elsif ($time=~/^([+-]?(?:\d+|\d*\.\d*))([smhdMy])/) {
-      $offset = ($mult{$2} || 1)*$1;
-    } else {
-      return $time;
-    }
-    return (time+$offset);
+
+    return 0 if !$time or lc($time) eq 'now';
+
+    return $time if $time=~/^\d+/;
+    
+    return ($mult{$2} || 1)*$1
+        if $time=~/^([+-]?(?:\d+|\d*\.\d*))([smhdMy])/;
+    
+    if ( $time =~ /^(Mon|Tue|Wed|Thu|Fri|Sat|Sun)/ ) {
+        require Date::Parse;
+        return Date::Parse::str2time( $time ) - time;
+    } 
+    
+    return $time;
 }
 
 sub ebcdic2ascii {
