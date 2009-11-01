@@ -8,7 +8,7 @@ BEGIN {
     *CORE::GLOBAL::time = sub { 100 };
 }
 
-use Test::More tests => 106;
+use Test::More tests => 116;
 use CGI::Util qw(escape unescape);
 use POSIX qw(strftime);
 
@@ -334,23 +334,26 @@ my @test_cookie = (
 MAX_AGE: {
     eval {
         CGI::Cookie->new(
-            '-expires' => '+2M',
-            '-max-age' => '+2M',
+            -expires => '+2M',
+            -max_age => '+2M',
         );
     };
 
     like $@ => 
-    qr/can't use both 'expires' and 'max-age' arguments at the same time/, 
-    q{can't use expires and max-age at the same time};
+    qr/can't use both 'expires' and 'max_age' arguments at the same time/, 
+    q{can't use expires and max_age at the same time};
 
-    my $cookie_expires = CGI::Cookie->new( '-expires' => '+3y' );
-    my $cookie_max_age = CGI::Cookie->new( '-max-age' => '+3y' );
+    my $cookie_expires = CGI::Cookie->new( -expires => '+3y' );
+    my $cookie_max_age = CGI::Cookie->new( -max_age => '+3y' );
 
     is $cookie_expires => $cookie_max_age, 
         'max-age and expires new() arguments';
 
 
-    my $cookie = CGI::Cookie->new( '-expires' => 'now',);
+    my $cookie = CGI::Cookie->new( 
+        -name => 'foo',
+        -expires => 'now',
+    );
 
     is $cookie->expires, 'Thu, 01-Jan-1970 00:01:40 GMT';
     is $cookie->max_age => 0, 'max-age for now is zero';
@@ -368,6 +371,42 @@ MAX_AGE: {
 
     $cookie->max_age( '113' );  
     is $cookie->max_age => 113, 'max_age(num) as delta';
+
+    $cookie->max_age( -99 );
+    is $cookie->max_age => 0, 'negative max-age => delta of 0';
+    is $cookie->expires => 'Thu, 01-Jan-1970 00:00:01 GMT', '...but the expires is in the past';
+
+    $cookie->max_age( undef );
+    unlike "$cookie" => qr/max-age|expires/, 
+        'undef the max-age removes it from the cookie';
+
+    $cookie->max_age( 100 );
+    $cookie->expires( undef );
+    unlike "$cookie" => qr/max-age|expires/, 
+        'undef the expires removes it from the cookie';
+
+    $cookie->max_age( 100 );
+    $cookie->show_expires( 0 );
+
+    unlike "$cookie" => qr/expires/, q{don't show expires};
+    like   "$cookie" => qr/max-age/, q{show max-age};
+
+    $cookie->show_max_age( 0 );
+    unlike "$cookie" => qr/expires|max-age/, q{max-age is gone};
+
+    $cookie->show_max_age( 1 );
+    $cookie->show_expires( 1 );
+    like "$cookie" => qr/expires/, q{expires is back};
+    like "$cookie" => qr/max-age/, q{and so is max-age};
+
+    $cookie = CGI::Cookie->new(
+        -name => 'foo',
+        -max_age => 99,
+        -show_expires => 0,
+        -show_max_age => 0,
+    );
+
+    unlike "$cookie" => qr/expires|max-age/, q{show_* new() arguments work};
 }
 
 

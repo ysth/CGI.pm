@@ -124,13 +124,14 @@ sub new {
   # Ignore mod_perl request object--compatability with Apache::Cookie.
   shift if ref $_[0]
         && eval { $_[0]->isa('Apache::Request::Req') || $_[0]->isa('Apache') };
-  my($name,$value,$path,$domain,$secure,$expires,$max_age, $httponly) =
+  my($name,$value,$path,$domain,$secure,$expires,$max_age, $httponly,
+      $show_expires, $show_max_age ) =
     rearrange([ 'NAME', ['VALUE','VALUES'], qw/ PATH DOMAIN SECURE EXPIRES
-        MAX-AGE HTTPONLY / ], @_);
+        MAX_AGE HTTPONLY SHOW_EXPIRES SHOW_MAX_AGE / ], @_);
 
-  croak "can't use both 'expires' and 'max-age' arguments at the same time" 
+  croak "can't use both 'expires' and 'max_age' arguments at the same time" 
     if $expires and $max_age;
-  
+
   # Pull out our parameters.
   my @values = !ref $value           ? $value 
              : ref $value eq 'ARRAY' ? @$value 
@@ -155,6 +156,13 @@ sub new {
   $self->expires($expires) if defined $expires;
   $self->max_age($max_age) if defined $max_age;
   $self->httponly($httponly) if defined $httponly;
+
+  # defaults for show_expires and show_max_age
+  $self->{$_} = 1 for qw/ show_expires show_max_age /;
+
+  $self->show_expires( $show_expires ) if defined $show_expires;
+  $self->show_max_age( $show_max_age ) if defined $show_max_age;
+  
   return $self;
 }
 
@@ -166,10 +174,9 @@ sub as_string {
 
     push(@constant_values,"domain=$domain")   if $domain = $self->domain;
     push(@constant_values,"path=$path")       if $path = $self->path;
-    if ( $self->max_age ) {
-        push @constant_values,
-            'expires='.$self->expires,
-            'max-age='.$self->max_age;
+    if ( defined $self->max_age ) {
+        push @constant_values, 'expires='.$self->expires if $self->show_expires;
+        push @constant_values, 'max-age='.$self->max_age if $self->show_max_age;
     }
     push(@constant_values,"secure") if $secure = $self->secure;
     push(@constant_values,"HttpOnly") if $httponly = $self->httponly;
@@ -244,27 +251,60 @@ sub secure {
 sub expires {
     my $self = shift;
 
-    if( my $time = shift ) {
+    if( @_ ) {
+        my $time = shift;
+
+        return $self->{max_age} = undef unless defined $time;
+
         $time -= time if $time =~ /^\d+/;
         $self->{max_age} = CGI::Util::max_age_calc( $time );
     }
 
     return defined( $self->{max_age} )
-        ? CGI::Util::expires(time() + $self->max_age,'cookie')
+        ? CGI::Util::expires(time() + $self->{max_age},'cookie')
         : undef 
         ;
 }
 
 sub max_age {
   my $self = shift;
-  if ( my $max_age = shift ) {
+
+  if ( @_ ) {
+      my $max_age = shift;
+
+      return $self->{max_age} = undef unless defined $max_age;
+
       # so that passing a max age of 3 isn't considered as
       # a timestamp of the 70s
       $max_age = '+' . $max_age unless $max_age =~ /^[+-]/;
       $self->{max_age} = 0 + CGI::Util::max_age_calc($max_age);
   }
 
-  return $self->{max_age};
+  return unless defined $self->{max_age};
+
+  # don't know how browsers would react to negative numbers,
+  # so I take no chance
+  return $self->{max_age} > 0 ? $self->{max_age} : 0 ;
+}
+
+sub show_expires {
+    my $self = shift;
+
+    if ( @_ ) {
+        $self->{show_expires} = shift;
+    }
+
+    return $self->{show_expires};
+}
+
+sub show_max_age {
+    my $self = shift;
+
+    if ( @_ ) {
+        $self->{show_max_age} = shift;
+    }
+
+    return $self->{show_max_age};
 }
 
 sub path {
@@ -294,11 +334,14 @@ CGI::Cookie - Interface to Netscape Cookies
     use CGI::Cookie;
 
     # Create new cookies and send them
-    $cookie1 = new CGI::Cookie(-name=>'ID',-value=>123456);
-    $cookie2 = new CGI::Cookie(-name=>'preferences',
-                               -value=>{ font => Helvetica,
-                                         size => 12 } 
-                               );
+    $cookie1 = CGI::Cookie->new(-name=>'ID',-value=>123456);
+    $cookie2 = CGI::Cookie->new(
+        -name=>'preferences',
+        -value=> { 
+            font => Helvetica,
+            size => 12 
+        } 
+    );
     print header(-cookie=>[$cookie1,$cookie2]);
 
     # fetch existing cookies
@@ -385,13 +428,13 @@ L<http://msdn.microsoft.com/en-us/library/ms533046%28VS.85%29.aspx>
 
 =head2 Creating New Cookies
 
-	my $c = new CGI::Cookie(-name    =>  'foo',
-                             -value   =>  'bar',
-                             -expires =>  '+3M',
-                             -domain  =>  '.capricorn.com',
-                             -path    =>  '/cgi-bin/database',
-                             -secure  =>  1
-	                    );
+	my $c = CGI::Cookie->new( -name    =>  'foo',
+                              -value   =>  'bar',
+                              -max_age =>  '+3M',
+                              -domain  =>  '.capricorn.com',
+                              -path    =>  '/cgi-bin/database',
+                              -secure  =>  1
+	                     );
 
 Create cookies from scratch with the B<new> method.  The B<-name> and
 B<-value> parameters are required.  The name must be a scalar value.
@@ -399,9 +442,18 @@ The value can be a scalar, an array reference, or a hash reference.
 (At some point in the future cookies will support one of the Perl
 object serialization protocols for full generality).
 
-B<-expires> accepts any of the relative or absolute date formats
+B<-max_age>, or B<-expires>, accepts any of the relative or absolute date formats
 recognized by CGI.pm, for example "+3M" for three months in the
-future.  See CGI.pm's documentation for details.
+future.  The only difference in behavior between the two arguments 
+is if the time is passed
+as a raw number: B<-expires> will consider it as timestamp, whereas
+B<-max_age> will see it as the number of seconds before the cookie expires.
+Beside this distinction, both arguments can be used interchangeably.
+They can't, however, be used at the same time.
+
+By default, both the legacy 'Expires' and the newer 'Max-Age' fields 
+are included in the cookie.  They can both be excluded by setting 
+B<-show_expires> and B<-show_max_age> to false.
 
 B<-domain> points to a domain name or to a fully qualified host name.
 If not specified, the cookie will be returned only to the Web server
@@ -441,9 +493,11 @@ If you want to set the cookie yourself, Within a CGI script you can send
 a cookie to the browser by creating one or more Set-Cookie: fields in the
 HTTP header.  Here is a typical sequence:
 
-  my $c = new CGI::Cookie(-name    =>  'foo',
-                          -value   =>  ['bar','baz'],
-                          -expires =>  '+3M');
+  my $c = CGI::Cookie->(
+    -name    =>  'foo',
+    -value   =>  ['bar','baz'],
+    -max_age =>  '+3M'
+  );
 
   print "Set-Cookie: $c\n";
   print "Content-Type: text/html\n\n";
@@ -535,9 +589,30 @@ Get or set the cookie's domain.
 
 Get or set the cookie's path.
 
-=item B<expires()>
+=item B<expires()>, B<max_age()>
 
-Get or set the cookie's expiration time.
+Get or set the cookie's expiration time. Both functions
+treat the passed expiration time the same, unless it is
+a raw number.  In that case B<expires> will consider it as timestamp 
+and B<max_age> will see it as the number of seconds before the 
+cookie expires.
+
+=item B<show_max_age()>
+
+Enable/disable the inclusion of the 'Max-Age' field in the cookie.
+The field is included by default.  Return the current setting.
+
+    unless ( $cookie->show_max_age or $cookie->show_expires ) {
+        # if no expiration field is chosen,
+        # go with 'max-age'
+        
+        $cookie->show_max_age(1);
+    }
+
+=item B<show_expires()>
+
+Enable/disable the inclusion of the 'Expires' field in the cookie.
+The field is included by default.  Return the current setting.
 
 =back
 
