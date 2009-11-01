@@ -301,9 +301,6 @@ sub max_age_calc {
     # "+3M"  -- in 3 months
     # "+2y"  -- in 2 years
     # "-3m"  -- 3 minutes ago(!)
-    # If you don't supply one of these forms, we assume you are
-    # specifying the date yourself
-    my($offset);
 
     return 0 if !$time or lc($time) eq 'now';
 
