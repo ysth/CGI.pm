@@ -124,11 +124,9 @@ sub new {
   # Ignore mod_perl request object--compatability with Apache::Cookie.
   shift if ref $_[0]
         && eval { $_[0]->isa('Apache::Request::Req') || $_[0]->isa('Apache') };
-  my($name,$value,$path,$domain,$secure,$expires,$max_age, $httponly,
-      $show_expires, $show_max_age ) =
+  my($name,$value,$path,$domain,$secure,$expires,$max_age, $httponly) =
     rearrange([ 'NAME', ['VALUE','VALUES'], qw/ PATH DOMAIN SECURE EXPIRES
-        MAX_AGE HTTPONLY SHOW_EXPIRES SHOW_MAX_AGE / ], @_);
-
+        MAX_AGE HTTPONLY / ], @_);
   croak "can't use both 'expires' and 'max_age' arguments at the same time" 
     if $expires and $max_age;
 
@@ -157,12 +155,6 @@ sub new {
   $self->max_age($max_age) if defined $max_age;
   $self->httponly($httponly) if defined $httponly;
 
-  # defaults for show_expires and show_max_age
-  $self->{$_} = 1 for qw/ show_expires show_max_age /;
-
-  $self->show_expires( $show_expires ) if defined $show_expires;
-  $self->show_max_age( $show_max_age ) if defined $show_max_age;
-  
   return $self;
 }
 
@@ -175,8 +167,8 @@ sub as_string {
     push(@constant_values,"domain=$domain")   if $domain = $self->domain;
     push(@constant_values,"path=$path")       if $path = $self->path;
     if ( defined $self->max_age ) {
-        push @constant_values, 'expires='.$self->expires if $self->show_expires;
-        push @constant_values, 'max-age='.$self->max_age if $self->show_max_age;
+        push @constant_values, 'expires='.$self->expires;
+        push @constant_values, 'max-age='.$self->max_age;
     }
     push(@constant_values,"secure") if $secure = $self->secure;
     push(@constant_values,"HttpOnly") if $httponly = $self->httponly;
@@ -285,26 +277,6 @@ sub max_age {
   # don't know how browsers would react to negative numbers,
   # so I take no chance
   return $self->{max_age} > 0 ? $self->{max_age} : 0 ;
-}
-
-sub show_expires {
-    my $self = shift;
-
-    if ( @_ ) {
-        $self->{show_expires} = shift;
-    }
-
-    return $self->{show_expires};
-}
-
-sub show_max_age {
-    my $self = shift;
-
-    if ( @_ ) {
-        $self->{show_max_age} = shift;
-    }
-
-    return $self->{show_max_age};
 }
 
 sub path {
@@ -451,10 +423,6 @@ B<-max_age> will see it as the number of seconds before the cookie expires.
 Beside this distinction, both arguments can be used interchangeably.
 They can't, however, be used at the same time.
 
-By default, both the legacy 'Expires' and the newer 'Max-Age' fields 
-are included in the cookie.  They can both be excluded by setting 
-B<-show_expires> and B<-show_max_age> to false.
-
 B<-domain> points to a domain name or to a fully qualified host name.
 If not specified, the cookie will be returned only to the Web server
 that created it.
@@ -596,23 +564,6 @@ treat the passed expiration time the same, unless it is
 a raw number.  In that case B<expires> will consider it as timestamp 
 and B<max_age> will see it as the number of seconds before the 
 cookie expires.
-
-=item B<show_max_age()>
-
-Enable/disable the inclusion of the 'Max-Age' field in the cookie.
-The field is included by default.  Return the current setting.
-
-    unless ( $cookie->show_max_age or $cookie->show_expires ) {
-        # if no expiration field is chosen,
-        # go with 'max-age'
-        
-        $cookie->show_max_age(1);
-    }
-
-=item B<show_expires()>
-
-Enable/disable the inclusion of the 'Expires' field in the cookie.
-The field is included by default.  Return the current setting.
 
 =back
 

@@ -8,7 +8,7 @@ BEGIN {
     *CORE::GLOBAL::time = sub { 100 };
 }
 
-use Test::More tests => 116;
+use Test::More tests => 110;
 use CGI::Util qw(escape unescape);
 use POSIX qw(strftime);
 
@@ -385,28 +385,6 @@ MAX_AGE: {
     unlike "$cookie" => qr/max-age|expires/, 
         'undef the expires removes it from the cookie';
 
-    $cookie->max_age( 100 );
-    $cookie->show_expires( 0 );
-
-    unlike "$cookie" => qr/expires/, q{don't show expires};
-    like   "$cookie" => qr/max-age/, q{show max-age};
-
-    $cookie->show_max_age( 0 );
-    unlike "$cookie" => qr/expires|max-age/, q{max-age is gone};
-
-    $cookie->show_max_age( 1 );
-    $cookie->show_expires( 1 );
-    like "$cookie" => qr/expires/, q{expires is back};
-    like "$cookie" => qr/max-age/, q{and so is max-age};
-
-    $cookie = CGI::Cookie->new(
-        -name => 'foo',
-        -max_age => 99,
-        -show_expires => 0,
-        -show_max_age => 0,
-    );
-
-    unlike "$cookie" => qr/expires|max-age/, q{show_* new() arguments work};
 }
 
 
