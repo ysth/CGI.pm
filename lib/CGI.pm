@@ -19,7 +19,7 @@ use Carp 'croak';
 #   http://stein.cshl.org/WWW/software/CGI/
 
 $CGI::revision = '$Id: CGI.pm,v 1.266 2009/07/30 16:32:34 lstein Exp $';
-$CGI::VERSION='3.48';
+$CGI::VERSION='3.49';
 
 # HARD-CODED LOCATION FOR FILE UPLOAD TEMPORARY FILES.
 # UNCOMMENT THIS ONLY IF YOU KNOW WHAT YOU'RE DOING.
@@ -663,7 +663,7 @@ sub init {
 	  if ( $content_length > 0 ) {
 	    $self->read_from_client(\$query_string,$content_length,0);
 	  }
-	  else {
+	  elsif (not defined $ENV{CONTENT_LENGTH}) {
 	    $self->read_from_stdin(\$query_string);
 	    # should this be PUTDATA in case of PUT ?
 	    my($param) = $meth . 'DATA' ;
@@ -2566,6 +2566,7 @@ sub popup_menu {
     my(@values);
     @values = $self->_set_values_and_labels($values,\$labels,$name);
     $tabindex = $self->element_tab($tabindex);
+    $name = q{} if ! defined $name;
     $result = qq/<select name="$name" $tabindex$other>\n/;
     for (@values) {
         if (/<optgroup/) {
@@ -2626,7 +2627,7 @@ sub optgroup {
     @values = $self->_set_values_and_labels($values,\$labels,$name,$labeled,$novals);
     my($other) = @other ? " @other" : '';
 
-    $name=$self->_maybe_escapeHTML($name);
+    $name = $self->_maybe_escapeHTML($name) || q{};
     $result = qq/<optgroup label="$name"$other>\n/;
     for (@values) {
         if (/<optgroup/) {
