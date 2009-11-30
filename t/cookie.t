@@ -2,7 +2,13 @@
 
 use strict;
 
-use Test::More tests => 96;
+# to have a consistent baseline, we nail the current time
+# to 100 seconds after the epoch
+BEGIN {
+    *CORE::GLOBAL::time = sub { 100 };
+}
+
+use Test::More tests => 110;
 use CGI::Util qw(escape unescape);
 use POSIX qw(strftime);
 
@@ -256,7 +262,7 @@ my @test_cookie = (
   # This looks titally whacked, but it does the -1, 0, 1 comparison
   # thing so 0 means they match
   is($c1->compare("$c1"), 0, "Cookies are identical");
-  is($c1->compare("$c2"), 0, "Cookies are identical");
+  is( "$c1", "$c2", "Cookies are identical");
 
   $c1 = CGI::Cookie->new(-name   => 'Jam',
 			 -value  => 'Hamster',
@@ -320,6 +326,68 @@ my @test_cookie = (
   ok(!$c->secure(0), 'secure attribute is cleared');
   ok(!$c->secure,    'secure attribute is cleared');
 }
+
+#----------------------------------------------------------------------------
+# Max-age 
+#----------------------------------------------------------------------------
+
+MAX_AGE: {
+    eval {
+        CGI::Cookie->new(
+            -expires => '+2M',
+            -max_age => '+2M',
+        );
+    };
+
+    like $@ => 
+    qr/can't use both 'expires' and 'max_age' arguments at the same time/, 
+    q{can't use expires and max_age at the same time};
+
+    my $cookie_expires = CGI::Cookie->new( -expires => '+3y' );
+    my $cookie_max_age = CGI::Cookie->new( -max_age => '+3y' );
+
+    is $cookie_expires => $cookie_max_age, 
+        'max-age and expires new() arguments';
+
+
+    my $cookie = CGI::Cookie->new( 
+        -name => 'foo',
+        -expires => 'now',
+    );
+
+    is $cookie->expires, 'Thu, 01-Jan-1970 00:01:40 GMT';
+    is $cookie->max_age => 0, 'max-age for now is zero';
+
+    $cookie->expires( '+3d' );
+    is $cookie->expires, 'Sun, 04-Jan-1970 00:01:40 GMT';
+    is $cookie->max_age => 3*24*60*60, 'setting via expires';
+
+    $cookie->max_age( '+4d' );
+    is $cookie->expires, 'Mon, 05-Jan-1970 00:01:40 GMT';
+    is $cookie->max_age => 4*24*60*60, 'setting via max-age';
+
+    $cookie->expires( '113' );  
+    is $cookie->max_age => 13, 'expires(num) as timestamp';
+
+    $cookie->max_age( '113' );  
+    is $cookie->max_age => 113, 'max_age(num) as delta';
+
+    $cookie->max_age( -99 );
+    is $cookie->max_age => 0, 'negative max-age => delta of 0';
+    is $cookie->expires => 'Thu, 01-Jan-1970 00:00:01 GMT', '...but the expires is in the past';
+
+    $cookie->max_age( undef );
+    unlike "$cookie" => qr/max-age|expires/, 
+        'undef the max-age removes it from the cookie';
+
+    $cookie->max_age( 100 );
+    $cookie->expires( undef );
+    unlike "$cookie" => qr/max-age|expires/, 
+        'undef the expires removes it from the cookie';
+
+}
+
+
 
 #-----------------------------------------------------------------------------
 # Apache2?::Cookie compatibility.

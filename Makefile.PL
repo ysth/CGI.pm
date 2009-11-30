@@ -16,6 +16,7 @@ WriteMakefile(
        'Test::More'  => 0.80, # Ideally, this could be just a "test_requires"
        'File::Spec'  => .82,
        'FCGI'        => 0.67,
+       'Time::Piece' => 0,
     },
     'linkext'   => { LINKTYPE=>'' },	# no link needed
     'dist'      => {'COMPRESS'=>'gzip -9f', 'SUFFIX' => 'gz',

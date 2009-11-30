@@ -3,6 +3,8 @@ package CGI::Util;
 use strict;
 use vars qw($VERSION @EXPORT_OK @ISA $EBCDIC @A2E @E2A);
 require Exporter;
+use Carp;
+
 @ISA = qw(Exporter);
 @EXPORT_OK = qw(rearrange rearrange_header make_attributes unescape escape 
 		expires ebcdic2ascii ascii2ebcdic);
@@ -264,12 +266,8 @@ sub expires {
     my($time,$format) = @_;
     $format ||= 'http';
 
-    my(@MON)=qw/Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec/;
-    my(@WDAY) = qw/Sun Mon Tue Wed Thu Fri Sat/;
-
-    # pass through preformatted dates for the sake of expire_calc()
-    $time = expire_calc($time);
-    return $time unless $time =~ /^\d+$/;
+    my @MON =qw/Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec/;
+    my @WDAY  = qw/Sun Mon Tue Wed Thu Fri Sat/;
 
     # make HTTP/cookie date string from GMT'ed time
     # (cookies use '-' as date separator, HTTP uses ' ')
@@ -285,6 +283,10 @@ sub expires {
 # hours from the current time.  It incorporates modifications from 
 # Mark Fisher.
 sub expire_calc {
+    return max_age_calc( @_ ) + time;
+}
+
+sub max_age_calc {
     my($time) = @_;
     my(%mult) = ('s'=>1,
                  'm'=>60,
@@ -301,19 +303,25 @@ sub expire_calc {
     # "+3M"  -- in 3 months
     # "+2y"  -- in 2 years
     # "-3m"  -- 3 minutes ago(!)
-    # If you don't supply one of these forms, we assume you are
-    # specifying the date yourself
-    my($offset);
-    if (!$time || (lc($time) eq 'now')) {
-      $offset = 0;
-    } elsif ($time=~/^\d+/) {
-      return $time;
-    } elsif ($time=~/^([+-]?(?:\d+|\d*\.\d*))([smhdMy])/) {
-      $offset = ($mult{$2} || 1)*$1;
-    } else {
-      return $time;
-    }
-    return (time+$offset);
+
+    return 0 if !$time or lc($time) eq 'now';
+
+    return $time if $time=~/^\d+/;
+    
+    return ($mult{$2} || 1)*$1
+        if $time=~/^([+-]?(?:\d+|\d*\.\d*))([smhdMy])/;
+    
+    if ( $time =~ /^(Mon|Tue|Wed|Thu|Fri|Sat|Sun)/ ) {
+        require Time::Piece;
+        my $delta = eval {
+            Time::Piece->strptime( $time, "%a, %d-%b-%Y %T GMT" )->epoch 
+                - time;
+        };
+        croak "couldn't parse time string '$time'" if $@;
+        return $delta;
+    } 
+    
+    return $time;
 }
 
 sub ebcdic2ascii {
