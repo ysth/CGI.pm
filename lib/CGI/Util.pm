@@ -3,6 +3,8 @@ package CGI::Util;
 use strict;
 use vars qw($VERSION @EXPORT_OK @ISA $EBCDIC @A2E @E2A);
 require Exporter;
+use Carp;
+
 @ISA = qw(Exporter);
 @EXPORT_OK = qw(rearrange rearrange_header make_attributes unescape escape 
 		expires ebcdic2ascii ascii2ebcdic);
@@ -310,8 +312,13 @@ sub max_age_calc {
         if $time=~/^([+-]?(?:\d+|\d*\.\d*))([smhdMy])/;
     
     if ( $time =~ /^(Mon|Tue|Wed|Thu|Fri|Sat|Sun)/ ) {
-        require Date::Parse;
-        return Date::Parse::str2time( $time ) - time;
+        require Time::Piece;
+        my $delta = eval {
+            Time::Piece->strptime( $time, "%a, %d-%b-%Y %T GMT" )->epoch 
+                - time;
+        };
+        croak "couldn't parse time string '$time'" if $@;
+        return $delta;
     } 
     
     return $time;
