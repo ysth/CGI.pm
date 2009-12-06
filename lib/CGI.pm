@@ -1038,24 +1038,28 @@ sub read_from_stdin {
     my($tempbuf) = '';
     my($bufsiz) = 1024;
     my($res);
-    while ($eoffound == 0) {
-	if ( $MOD_PERL ) {
-	    $res = $self->r->read($tempbuf, $bufsiz, 0)
-	}
-	else {
-	    $res = read(\*STDIN, $tempbuf, $bufsiz);
-	}
+    while (1) {
+        eval {
+            local $SIG{ALRM} = sub { die "alarm\n" };
+            alarm 5;
+            $res = $MOD_PERL ? $self->r->read($tempbuf, $bufsiz, 0)
+                             : read(\*STDIN, $tempbuf, $bufsiz)
+                             ;
+            alarm 0;
+        };
 
-	if ( !defined($res) ) {
-	    # TODO: how to do error reporting ?
-	    $eoffound = 1;
-	    last;
-	}
-	if ( $res == 0 ) {
-	    $eoffound = 1;
-	    last;
-	}
-	$localbuf .= $tempbuf;
+        if ( $@ ) {
+            return $res if $@ eq "alarm\n";
+            die $@;  # wan't the timeout, propagate
+        }
+
+        if ( !defined($res) or $res == 0 ) {
+            # TODO: how to do error reporting ?
+            $eoffound = 1;
+            last;
+        }
+
+        $localbuf .= $tempbuf;
     }
 
     $$buff = $localbuf;
