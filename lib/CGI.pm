@@ -2957,6 +2957,7 @@ END_OF_FUNC
 sub param_fetch {
     my($self,@p) = self_or_default(@_);
     my($name) = rearrange([NAME],@p);
+    $name = '' if ! defined $name;
     unless (exists($self->{param}{$name})) {
 	$self->add_parameter($name);
 	$self->{param}{$name} = [];
